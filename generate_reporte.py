@@ -30,6 +30,49 @@ REQUIRED_COLUMNS = [
     COL_SUBPLATAFORMA,
 ]
 
+MES_ABREVIATURAS = {
+    1: "ene",
+    2: "feb",
+    3: "mar",
+    4: "abr",
+    5: "may",
+    6: "jun",
+    7: "jul",
+    8: "ago",
+    9: "sep",
+    10: "oct",
+    11: "nov",
+    12: "dic",
+}
+
+MES_ALIAS = {
+    "ene": 1,
+    "enero": 1,
+    "feb": 2,
+    "febrero": 2,
+    "mar": 3,
+    "marzo": 3,
+    "abr": 4,
+    "abril": 4,
+    "may": 5,
+    "mayo": 5,
+    "jun": 6,
+    "junio": 6,
+    "jul": 7,
+    "julio": 7,
+    "ago": 8,
+    "agosto": 8,
+    "sep": 9,
+    "sept": 9,
+    "septiembre": 9,
+    "oct": 10,
+    "octubre": 10,
+    "nov": 11,
+    "noviembre": 11,
+    "dic": 12,
+    "diciembre": 12,
+}
+
 
 def _validar_columnas(df: pd.DataFrame) -> None:
     faltantes = [c for c in REQUIRED_COLUMNS if c not in df.columns]
@@ -46,13 +89,50 @@ def _cargar_datos(path: Path) -> pd.DataFrame:
 
 
 def _filtrar_y_limpiar(df: pd.DataFrame) -> pd.DataFrame:
-    filtrado = df[df[COL_MES] == MES_OBJETIVO].copy()
+    objetivo_normalizado = _normalizar_mes_anio_valor(MES_OBJETIVO)
+    if objetivo_normalizado is None:
+        raise ValueError(f"No se pudo interpretar MES_OBJETIVO: {MES_OBJETIVO}")
+
+    meses_normalizados = df[COL_MES].map(_normalizar_mes_anio_valor)
+    filtrado = df[meses_normalizados == objetivo_normalizado].copy()
 
     filtrado[COL_VENTAS] = pd.to_numeric(filtrado[COL_VENTAS], errors="coerce").fillna(0)
     filtrado[COL_DCH] = pd.to_numeric(filtrado[COL_DCH], errors="coerce").fillna(0)
 
     filtrado = filtrado[~((filtrado[COL_VENTAS] == 0) & (filtrado[COL_DCH] == 0))].copy()
     return filtrado
+
+
+def _normalizar_mes_anio_valor(valor: object) -> str | None:
+    if pd.isna(valor):
+        return None
+
+    ts = pd.to_datetime(valor, errors="coerce")
+    if not pd.isna(ts):
+        return f"{MES_ABREVIATURAS[int(ts.month)]} {int(ts.year)}"
+
+    texto = str(valor).strip().lower()
+    if not texto:
+        return None
+
+    tokens = texto.replace("-", " ").replace("/", " ").split()
+    if len(tokens) >= 2:
+        mes = MES_ALIAS.get(tokens[0])
+        if mes is not None:
+            anio = _extraer_anio(tokens[1])
+            if anio is not None:
+                return f"{MES_ABREVIATURAS[mes]} {anio}"
+
+    return None
+
+
+def _extraer_anio(texto: str) -> int | None:
+    digitos = "".join(ch for ch in texto if ch.isdigit())
+    if len(digitos) == 4:
+        return int(digitos)
+    if len(digitos) == 2:
+        return 2000 + int(digitos)
+    return None
 
 
 def _consolidar_sku(df: pd.DataFrame) -> pd.DataFrame:
